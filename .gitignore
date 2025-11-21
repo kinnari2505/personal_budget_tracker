@@ -1,0 +1,29 @@
+# Virtual env
+venv/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env.*
+*.sqlite3
+# *.db
+instance/
+*.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python temp
+*.egg-info/
+dist/
+build/
+
+# Uvicorn reload DB file (if any)
+*.db-journal
