@@ -12,19 +12,22 @@ router = APIRouter(prefix="/api/transactions", tags=['transactions'])
 # ---------------------------
 # Create a Transaction
 # ---------------------------
-@router.post("/", response_model=TransactionOut)
-def create_transaction(tx_in: TransactionCreate,db: Session = Depends(get_db),current_user: User = Depends(get_current_user)):
+@router.post("/", response_model=TransactionOut,status_code=201)
+def create_transaction(tx_in: TransactionCreate,
+                       db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
 
+    category = None
     # If category_id is provided, verify it belongs to this user
-    if tx_in.category_id:
+    if tx_in.category_id is not None:
         category = (
             db.query(Category)
             .filter(Category.id == tx_in.category_id,
             Category.user_id == current_user.id,
             ).first())
     
-    if not category:
-        raise HTTPException(status_code=400, detail="Invalid Category")
+        if not category:
+            raise HTTPException(status_code=400, detail="Invalid Category")
     
     tx = Transaction(
         user_id=current_user.id,
@@ -96,10 +99,15 @@ def update_transaction(
         if not category:
             raise HTTPException(status_code=400, detail="Invalid Category")
     
-    tx.transaction_type = tx_in.transaction_type
-    tx.amount = tx_in.amount
-    tx.category_id = tx_in.category_id
-    tx.date = tx_in.date
+    # Apply updates safely
+    if tx_in.transaction_type is not None:
+        tx.transaction_type = tx_in.transaction_type
+    if tx_in.amount is not None:
+        tx.amount = tx_in.amount
+    if tx_in.category_id is not None:
+        tx.category_id = tx_in.category_id
+    if tx_in.date is not None:
+        tx.date = tx_in.date
 
     db.commit()
     db.refresh(tx)

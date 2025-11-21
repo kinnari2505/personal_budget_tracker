@@ -12,10 +12,10 @@ router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 # ---------------------------
 # Create Budget
 # ---------------------------
-@router.post("/", response_model=BudgetOut)
+@router.post("/", response_model=BudgetOut,status_code=201)
 def create_budget(budget_in: BudgetCreate, db: Session = Depends(get_db),current_user : User = Depends(get_current_user)):
 
-    # Validate category
+    # Validate category belongs to user
     if budget_in.category_id:
         category = (
             db.query(Category)
@@ -28,6 +28,20 @@ def create_budget(budget_in: BudgetCreate, db: Session = Depends(get_db),current
         if not category:
             raise HTTPException(status_code=400, detail="Invalid Category")
     
+    # Prevent duplicate budget for same month+year+category
+    existing = db.query(Budget).filter(
+        Budget.user_id == current_user.id,
+        Budget.category_id == budget_in.category_id,
+        Budget.month == budget_in.month,
+        Budget.year == budget_in.year
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Budget already exists for this category in the selected month/year."
+        )
+
     budget = Budget(
         user_id =current_user.id,
         category_id=budget_in.category_id,
@@ -72,7 +86,9 @@ def get_budget(budget_id: int, db: Session = Depends(get_db), current_user: User
 # Update Budget
 # ---------------------------
 @router.put("/{budget_id}", response_model=BudgetOut)
-def update_budget(budget_id: int,budget_in: BudgetUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+def update_budget(budget_id: int,budget_in: BudgetUpdate, 
+                  db: Session = Depends(get_db), 
+                  current_user: User = Depends(get_current_user)):
 
     budget = (
         db.query(Budget)
@@ -85,7 +101,7 @@ def update_budget(budget_id: int,budget_in: BudgetUpdate, db: Session = Depends(
     if not budget:
         raise HTTPException(status_code=404, detail="Budget not found")
     
-    # Validate category
+    # Validate new category
     if budget.category_id:
         category = (
             db.query(Category)
@@ -97,11 +113,35 @@ def update_budget(budget_id: int,budget_in: BudgetUpdate, db: Session = Depends(
         )
         if not category:
             raise HTTPException(status_code=400, detail="Invalid Category")
-        
-    budget.amount = budget_in.amount
-    budget.month = budget_in.month
-    budget.year = budget_in.year
-    budget.category_id = budget_in.category_id
+    
+    # Prevent duplicate for updated values
+    new_category = budget_in.category_id or budget.category_id
+    new_month = budget_in.month or budget.month
+    new_year = budget_in.year or budget.year 
+
+    duplicate = db.query(Budget).filter(
+        Budget.user_id == current_user.id,
+        Budget.category_id == new_category,
+        Budget.month == new_month,
+        Budget.year == new_year,
+        Budget.id !=  budget_id
+    ).first()
+
+    if duplicate:
+        raise HTTPException(
+            status_code=400,
+            detail="Another budget already exists for this category/month/year."
+        )
+    
+    # Apply updates
+    if budget_in.amount is not None: 
+        budget.amount = budget_in.amount
+    if budget_in.month is not None:
+        budget.month = budget_in.month
+    if budget_in.year is not None:
+        budget.year = budget_in.year
+    if budget_in.category_id is not None:
+        budget.category_id = budget_in.category_id
 
     db.commit()
     db.refresh(budget)

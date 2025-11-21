@@ -12,9 +12,21 @@ router =  APIRouter(prefix="/api/categories", tags=["categories"])
 # ---------------------------
 # Create Category
 # ---------------------------
-@router.post("/",response_model=CategoryOut)
+@router.post("/",response_model=CategoryOut, status_code=201)
 def create_category(category_in: CategoryCreate, db: Session = Depends(get_db), current_user :User = Depends(get_current_user)):
     
+    # Prevent duplicate category name for same user
+    existing = db.query(Category).filter(
+        Category.user_id == current_user.id,
+        Category.name.ilike(category_in.name)
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail="Category with this name already exists."
+        )
+
     category = Category(name=category_in.name, user_id=current_user.id)
     db.add(category)
     db.commit()
@@ -44,11 +56,29 @@ def get_category(category_id: int, db: Session = Depends(get_db),current_user: U
 # Update Category by id
 # ---------------------------
 @router.put("/{category_id}", response_model=CategoryOut)
-def update_category(category_id: int, category_in: CategoryUpdate, db: Session = Depends(get_db), current_user : User = Depends(get_current_user)):
+def update_category(category_id: int, category_in: CategoryUpdate,
+                     db: Session = Depends(get_db), 
+                     current_user : User = Depends(get_current_user)):
+    
 
-    cat = db.query(Category).filter(Category.id == category_id, Category.user_id == current_user.id).first()
+    cat = db.query(Category).filter(Category.id == category_id, 
+                                    Category.user_id == current_user.id).first()
     if not cat:
         raise HTTPException(status_code=404, detail="Catgeory not found")
+    
+    # Check for duplicate name when updating
+    duplicate = db.query(Category).filter(
+        Category.user_id == current_user.id,
+        Category.name.ilike(category_in.name),
+        Category.id != category_id
+    ).first()
+
+    if duplicate:
+        raise HTTPException(
+            status_code=400,
+            detail="Another category with this name already exists."
+        )
+
     cat.name = category_in.name
     db.commit()
     db.refresh(cat)
@@ -57,7 +87,7 @@ def update_category(category_id: int, category_in: CategoryUpdate, db: Session =
 # ---------------------------
 # Delete Category  by ID
 # ---------------------------
-@router.delete("/{category_id}")
+@router.delete("/{category_id}", status_code=204)
 def delete_category(category_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
 
     cat = db.query(Category).filter(Category.id == category_id, Category.user_id == current_user.id).first()
@@ -65,7 +95,7 @@ def delete_category(category_id: int, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(cat)
     db.commit()
-    return {"Ok":True}
+    return None
 
 
 
